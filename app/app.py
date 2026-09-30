@@ -64,3 +64,80 @@ if st.button("Analyze Transaction"):
         st.error("⚠️ Transaction flagged for fraud review.")
     else:
         st.success("Transaction is below the fraud-review threshold.")
+        
+st.divider()
+
+st.subheader("📁 Batch Transaction Analysis")
+
+uploaded_file = st.file_uploader(
+    "Upload a CSV file containing transactions",
+    type=["csv"]
+)
+
+if uploaded_file is not None:
+
+    batch_data = pd.read_csv(uploaded_file)
+
+    required_columns = [
+        "step",
+        "type",
+        "amount",
+        "oldbalanceOrg",
+        "oldbalanceDest"
+    ]
+
+    missing_columns = [
+        col for col in required_columns
+        if col not in batch_data.columns
+    ]
+
+    if missing_columns:
+        st.error(
+            f"Missing required columns: {missing_columns}"
+        )
+
+    else:
+
+        batch_input = batch_data[required_columns]
+
+        batch_processed = preprocessor.transform(batch_input)
+
+        batch_probabilities = model.predict_proba(
+            batch_processed
+        )[:, 1]
+
+        batch_predictions = (
+            batch_probabilities >= threshold
+        ).astype(int)
+
+        def get_risk(probability):
+            if probability < 0.30:
+                return "Low"
+            elif probability < threshold:
+                return "Medium"
+            else:
+                return "High"
+
+        results = batch_input.copy()
+
+        results["Fraud Probability"] = batch_probabilities
+        results["Prediction"] = batch_predictions
+        results["Risk Level"] = [
+            get_risk(p)
+            for p in batch_probabilities
+        ]
+
+        st.success(
+            f"Analyzed {len(results)} transactions."
+        )
+
+        st.dataframe(results)
+
+        high_risk_count = (
+            results["Risk Level"] == "High"
+        ).sum()
+
+        st.metric(
+            "High-Risk Transactions",
+            int(high_risk_count)
+        )
